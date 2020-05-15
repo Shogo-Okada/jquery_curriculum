@@ -17,10 +17,12 @@
         </div>
         <div class="search">
           <div class="search__text">
-            <input type="text" id="js-search-word" class="search__text__input" placeholder="検索する">
+            <input type="text" id="js-search-word" class="search__text__input" placeholder="検索する" value="">
           </div>
           <button id="js-search-button" class="search__btn">検索する</button>
         </div>
+        <!-- ここに「これ以上はありません」が入ってくる -->
+        <!-- 取得できなかった文言もここに入ってくる -->
         <ul class="lists"></ul>
       </div>
     </div>
@@ -37,22 +39,122 @@
       // $.each(配列, function functionName() {}) 配列に対しての繰り返し処理
       // $.ajax({}) 外部ファイルやURLに対してデータをリクエストすることができます。
       // 以下は今回使う$.ajaxの基本的な形です。
-      //
-      // $.ajax({
-      //   url: 'https://app.rakuten.co.jp/services/api/BooksTotal/Search/20130522',
-      //   type: 'GET',
-      //   datatype: 'json',
-      //   data: {
-      //     // 「区分:サービス固有パラメーター」を確認して、必要な情報をdata内に入れましょう。
-      //     applicationId: '1019399324990976605', // (今回はこのIDを使用してください) ※IDは他サイト等には絶対に転載しないでください
-      //     booksGenreId: '001'
-      //   },
-      // }).done(function(data) {
-      //   // この中にデータ取得後の動きを記述していきます。
-      //   console.log(data);
-      // });
-      //
-      //
+      $(function() {  //--------------------ここからjQuery------------------
+        
+        var pages = "";
+
+        //検索中においての「検索する」ボタンのイベント記述
+        $(document).on('click', '.search__btn', function() { //clickした際、1ページから始まりapiを取得するように記述している。
+          //(対象要素).on(イベント名, セレクタ,  関数)
+          pages = 1;
+          api();
+        });
+        
+        
+        function api() {
+          var keywords = $('.search__text__input').val();
+
+          $('ul, .message').empty();
+
+          $.ajax({ //----------非同期通信----------------
+            url: 'https://app.rakuten.co.jp/services/api/BooksTotal/Search/20130522',
+            type: 'GET',　//サーバーからデータを取得することを目的に通信を行う⇔POSTデータを送信することを目的に通信を行う
+            // get⇔post 個人情報を渡す際、getだった場合、情報漏洩の危険がある
+            datatype: 'json',
+            data: {
+              // 「区分:サービス固有パラメーター」を確認して、必要な情報をdata内に入れましょう。
+              applicationId: '1019399324990976605', // (今回はこのIDを使用してください) ※IDは他サイト等には絶対に転載しないでください
+              booksGenreId: '001',
+              keyword: keywords, 
+              hits: '20',
+              page: pages
+            }
+          }).done(function(data) { //ajax--------データ取得した際の動き
+            // この中にデータ取得後の動きを記述していきます。
+
+            $.each(data.Items, function(index, element) {
+              //$.each(対象のオブジェクト, コールバック関数(第一引数, 第二引数))
+              $('.lists').append("<li class='lists__item'>" +
+                                  "<div class='lists__item__inner'>" +
+                                    "<a href="+ element.Item.itemUrl +" class='lists__item__link' target='_blank'>" +
+                                      "<img src="+ element.Item.largeImageUrl +" class='lists__item__img' alt=''>" + 
+                                      "<p class='lists__item__detail'>作品名："+ element.Item.title +"</p>" +
+                                      "<p class='lists__item__detail'>作者　："+ element.Item.author +"</p>" +
+                                      "<p class='lists__item__detail'>出版社："+ element.Item.publisherName +"</p>" +
+                                    "</a>" +
+                                  "</div>" +
+                                "</li>");
+                                console.log(element); //consoleに個々のデータを表示
+            });
+
+            // -------------ページャ--------------
+            $('.lists').append( "<div class='js-pager'>" +
+                                  "<ul class='btn-wrapper'>" +
+                                    "<li class='prev btn-item'><a class='btn-anchor' href='#'>前へ</a></li>" +
+                                    "<li class='next btn-item'><a class='btn-anchor' href='#'>次へ</a></li>" + //href='#'は「次へ」を押した際、上に戻るため
+                                  "</ul>" +
+                                "</div>");
+
+            // 「前へ」ボタン
+            if (pages === 1) {
+              $('.prev').addClass('disabled')
+                        .click(function() {
+                          return false; //アンカータグのクリックを無効
+                        });
+            } else {
+              $('.prev').click(function() {
+                pages --;
+                api(); // ---使用理由：ajaxに変更がかかった箇所を読み込ませるために必要
+              });
+            };
+
+            // 「次へ」ボタン
+            if (data.count <= 20) {
+              $('.next').addClass('disabled')
+                        .click(function() {
+                          $('.message').empty(); //------「これ以上はありません」を消すために必要
+                          $('.search').after('<div class="message">これ以上はありません</div>');
+                          pages = 1;
+                        });
+            } else if (pages === data.pageCount) { //ラストページでのイベント記述
+              $('.next').addClass('disabled')
+                        .click(function() {
+                          $('.message').empty();
+                          pages = data.pageCount;
+                          $('.search').after('<div class="message">これ以上はありません</div>');
+                        });
+            } else {
+              $('.next').click(function() {
+                pages ++;
+                api(); 
+              });
+            };
+
+            //------------検索結果がヒットしなかった場合------------
+            if (data.count === 0) {
+              $('ul').empty();
+              $('.search').after('<div class="message">検索結果が見つかりませんでした。<br>別のキーワードで検索して下さい。</div>');
+            };
+
+              console.log(data); //consoleに検索してヒットしたデータ全て(1~20件ずつ)表示
+          })  //----------doneここまで------------
+          
+          .fail(function(jqXHR) {　//データを取得できなかった時の動き
+            
+            if (jqXHR.status === 400) {
+              $('.search').after('<div class="message">検索文字が空、もしくは半角英数1文字になっています</div>');
+            } else if (jqXHR.status === 429){
+              $('.search').after('<div class="message">壊れるのでやめてもらっていいですか？</div>');
+            } else if (jqXHR.status === 0) {
+              $('.search').after('<div class="message">通信に失敗しました。インターネットの接続をご確認ください。</div>');
+            } else {
+              $('.search').after('<div class="message">予期せぬエラーが発生しました。</div>');
+            };
+
+            console.log(jqXHR);
+          }); //--------fail(function(jqXHR) { 終わり--------------
+        }; //---------------function api() 終わり-------------
+        
       // $.ajaxによってデータが取得できたら、必要なデータ(作品名とか作者名とか)を取得します。
       // 取得できたらHTMLに<ul class='lists'></ul>を用意しているので、下のテンプレに沿ってデータを入れ込みましょう。
       // <li class='lists__item'>
@@ -71,19 +173,8 @@
       // ├ 「前へ」と「次へ」のボタンがある
       // ├ 1ページ目では「前へ」に、最後のページでは「次へ」にdisabledクラスをつけて非活性（使用不能）にする
       // └ 1ページしかない場合はどちらもdisabledクラスをつけて非活性にする
-      // 
-      // ページャのテンプレート
-      // <div class="js-pager">
-      //   <ul class="btn-wrapper">
-      //     <li class="prev btn-item"><a class="btn-anchor" href="">前へ</a></li>
-      //     <li class="next btn-item"><a class="btn-anchor" href="">次へ</a></li>
-      //   </ul>
-      // </div>
-      //
-      //
-
-
-
+      }); //-------------end------------
+      
     </script>
   </body>
 </html>
